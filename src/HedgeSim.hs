@@ -3,32 +3,32 @@ module HedgeSim where
 import Black76
 
 type Price = Double
-type PnL   = Double
-type Time = Double
+type Time  = Double
 
 data HedgeState = HedgeState
-  { hsCash   :: Double
-  , hsDelta  :: Double
-  , hsSpot   :: Double
+  { hsCash  :: Double
+  , hsDelta :: Double
+  , hsSpot  :: Double
   } deriving Show
 
 stepHedge
-  :: (Double -> Double -> Double -> Double) -- s -> t -> sigma -> delta
-  -> Double   -- strike
-  -> Double   -- rate
-  -> Double   -- sigma
+  :: (Double -> Double -> Double -> Double)
+  -> Double
+  -> Double
+  -> Double
   -> [Price]
   -> [Time]
   -> [HedgeState]
-
-stepHedge deltaFn k r sigma prices times =
-  scanl go initState (zip prices times)
+stepHedge _ _ _ _ [] _ = []
+stepHedge _ _ _ _ _ [] = []
+stepHedge deltaFn _ _ sigma (p0:ps) (t0:ts) =
+  scanl go initState (zip ps ts)
   where
-    initDelta = deltaFn (head prices) (head times) sigma
+    initDelta = deltaFn p0 t0 sigma
     initState = HedgeState
-      { hsCash  = -(initDelta * head prices)
+      { hsCash  = -(initDelta * p0)
       , hsDelta = initDelta
-      , hsSpot  = head prices
+      , hsSpot  = p0
       }
 
     go st (s, t) =
@@ -43,3 +43,4 @@ computePnL st payoff =
 
 payoffCall :: Double -> Double -> Double
 payoffCall k s = max 0 (s - k)
+
