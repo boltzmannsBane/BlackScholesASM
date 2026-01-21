@@ -8,11 +8,18 @@ maintainer:          you@example.com
 build-type:          Simple
 
 library
-  exposed-modules:     Black76
-  hs-source-dirs:      src
-  build-depends:       base >=4.9 && <5,
-                       statistics
-  default-language:    Haskell2010
+  hs-source-dirs: src
+  exposed-modules:
+      Black76
+      HedgeSim
+      MojoBridge
+  build-depends:
+      base
+    , aeson
+    , bytestring
+    , process
+  default-language: Haskell2010
+
 
 test-suite black76-tests
   type:                exitcode-stdio-1.0
@@ -23,4 +30,22 @@ test-suite black76-tests
                        statistics,
                        wti-black76
   default-language:    Haskell2010
+
+test-suite wti-tests
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules:
+      HedgeSimSpec
+      MojoBridgeSpec
+  build-depends:
+      base
+    , tasty
+    , tasty-hunit
+    , aeson
+    , bytestring
+    , process
+    , wti-black76
+  default-language: Haskell2010
+
 

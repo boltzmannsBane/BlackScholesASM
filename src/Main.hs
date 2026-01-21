@@ -1,71 +1,45 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import qualified Data.ByteString.Lazy as BL
-import Data.Csv
-import qualified Data.Map.Strict as M
-import Data.Time (Day, defaultTimeLocale, parseTimeM, diffDays)
-import qualified Data.Vector as V
-import Text.Printf (printf)
-import System.Environment (getArgs)
-
+import HedgeSim
 import Black76
+import System.IO
 
--- Futures CSV expected to have: Date (MM/DD/YYYY), Price
-data FutRecord = FutRecord { fDate :: Day, fPrice :: Maybe Double }
-
-instance FromNamedRecord FutRecord where
-  parseNamedRecord r = do
-    dateStr <- r .: "Date"
-    -- parse MM/DD/YYYY
-    day <- case (parseTimeM True defaultTimeLocale "%m/%d/%Y" (dateStr :: String) :: Maybe Day) of
-             Just d  -> pure d
-             Nothing -> fail $ "Invalid futures date: " ++ dateStr
-    price <- optional (r .: "Price")
-    pure $ FutRecord day price
-
--- time to maturity (years)
-timeToMaturity :: Day -> Day -> Double
-timeToMaturity current expire = max 0 (fromIntegral (diffDays expire current) / 365.0)
-
--- Simple main: read futures CSV, price Black-76 call + Greeks (w.r.t forward)
--- Usage: wti-black76-exe /path/to/wti_futures.csv YYYY-MM-DD (expiry)
 main :: IO ()
 main = do
-    args <- getArgs
-    case args of
-      [futPath, expiryStr] -> do
-        futRaw <- BL.readFile futPath
-        let futMap = case decodeByName futRaw of
-              Left err -> error ("Futures CSV parse error: " ++ err)
-              Right (_, v) ->
-                V.foldl' (\acc (FutRecord d p) ->
-                            case p of
-                              Just price -> M.insert d price acc
-                              Nothing    -> acc
-                         ) M.empty v
+  let prices = [100,101,99,102,105,103,104,106,108,110]
+      times  = reverse [0.1,0.2..1.0]
+      k      = 100
+      r      = 0.01
+      
+      sigma = 0.2
 
-        -- parse expiry date (YYYY-MM-DD)
-        expiry <- case (parseTimeM True defaultTimeLocale "%Y-%m-%d" (expiryStr :: String) :: Maybe Day) of
-                    Just d  -> pure d
-                    Nothing -> error $ "Invalid expiry date: " ++ expiryStr
+      deltaFn s t = black76DeltaCall s k r t
 
-        let results = M.mapWithKey (\d f ->
-                        let t = timeToMaturity d expiry
-                            price = black76Call f 75.0 t 0.04 0.35  -- K/r/sigma here are example defaults
-                            deltaF = black76DeltaF f 75.0 t 0.04 0.35
-                            gammaF = black76GammaF f 75.0 t 0.04 0.35
-                        in (f, t, price, deltaF, gammaF)
-                      ) futMap
+      states = stepHedge deltaFn k r prices times
 
-        putStrLn "Date | Future | T (yrs) | B76_Call | Delta_F | Gamma_F"
-        mapM_ (\(d, (f, t, p, df, gf)) ->
-                putStrLn $ show d ++ " | "
-                          ++ printf "%.2f" f ++ " | "
-                          ++ printf "%.6f" t ++ " | "
-                          ++ printf "%.6f" p ++ " | "
-                          ++ printf "%.6f" df ++ " | "
-                          ++ printf "%.8f" gf
-              ) (reverse $ M.toList results)
+      finalSpot = last prices
+      payoff = payoffCall k finalSpot
 
-      _ -> putStrLn "Usage: wti-black76-exe /path/to/wti_futures.csv YYYY-MM-DD"
+      pnls = map (\st -> computePnL st payoff) states
+
+  writeFile "pnl.csv" $
+    unlines $ zipWith (\i p -> show i ++ "," ++ show p) [0..] pnls
+
+  print $ last pnls
+
+import MojoBridge
+
+runMojo :: IO ()
+runMojo = do
+  let input = MojoInput
+        { s0 = 100
+        , mu = 0
+        , sigma = 0.2
+        , r = 0.01
+        , k = 100
+        , steps = 252
+        , paths = 100000
+        }
+
+  result <- runMojoMC input
+  print result
