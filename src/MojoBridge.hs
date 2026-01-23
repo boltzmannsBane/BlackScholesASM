@@ -2,7 +2,9 @@
 
 module MojoBridge where
 
+import System.Process
 import Data.Aeson
+import qualified Data.ByteString.Lazy as B
 import GHC.Generics (Generic)
 
 data MojoInput = MojoInput
@@ -26,18 +28,12 @@ data MojoOutput = MojoOutput
 
 instance FromJSON MojoOutput
 
--- ======================================================
--- TEST-SAFE STUB
--- ======================================================
--- Mojo execution is intentionally disabled.
--- Tests require sane, finite outputs only.
--- ======================================================
-
 runMojoMC :: MojoInput -> IO MojoOutput
-runMojoMC input =
-  pure MojoOutput
-    { var_99  = 0.0
-    , cvar_99 = 0.0
-    , mean    = s0 input
-    , std     = sigma input * sqrt (fromIntegral (steps input))
-    }
+runMojoMC input = do
+  B.writeFile "input.json" (encode input)
+  callCommand "mojo run mojo/bridge.mojo"
+  out <- B.readFile "output.json"
+  case decode out of
+    Just r  -> pure r
+    Nothing -> error "Failed to decode Mojo output"
+
